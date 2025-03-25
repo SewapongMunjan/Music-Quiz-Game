@@ -1,0 +1,74 @@
+/* Custom animations */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.pulse-animation {
+  animation: pulse 1s infinite;
+}
+
+/* Correct answer animation */
+@keyframes correct-answer {
+  0% {
+    background-color: rgba(16, 185, 129, 0.2);
+  }
+  50% {
+    background-color: rgba(16, 185, 129, 0.5);
+  }
+  100% {
+    background-color: rgba(16, 185, 129, 0.2);
+  }
+}
+
+.correct-answer-animation {
+  animation: correct-answer 2s;
+}
+
+/* Wrong answer animation */
+@keyframes wrong-answer {
+  0% {
+    background-color: rgba(239, 68, 68, 0.2);
+  }
+  50% {
+    background-color: rgba(239, 68, 68, 0.5);
+  }
+  100% {
+    background-color: rgba(239, 68, 68, 0.2);
+  }
+}
+
+.wrong-answer-animation {
+  animation: wrong-answer 2s;
+}
+
+/* Timer animation */
+.timer-bar {
+  transition: width 1s linear;
+}
+
+/* Album image hover effect */
+.album-image {
+  transition: transform 0.3s ease;
+}
+
+.album-image:hover {
+  transform: scale(1.1);
+}
+
+/* Button hover effects */
+.button-hover-effect {
+  transition: all 0.3s ease;
+}
+
+.button-hover-effect:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
