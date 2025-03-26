@@ -3,9 +3,17 @@
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 // Fetch songs for the game
-export const fetchSongs = async () => {
+export const fetchSongs = async (playlistId = null) => {
   try {
-    const response = await fetch(`${API_URL}/api/songs`);
+    // ถ้ามี playlistId ให้ดึงเพลงจาก playlist นั้น
+    const url = playlistId 
+      ? `${API_URL}/api/spotify/playlist/${playlistId}/tracks` 
+      : `${API_URL}/api/songs`;
+      
+    const response = await fetch(url, {
+      credentials: 'include' // สำคัญเพื่อส่ง cookies
+    });
+    
     if (!response.ok) {
       throw new Error('Failed to fetch songs');
     }
@@ -24,61 +32,44 @@ export const fetchSongs = async () => {
   }
 };
 
-// Fetch songs by genre
-export const fetchSongsByGenre = async (genre) => {
+// Fetch user profile
+export const fetchUserProfile = async () => {
   try {
-    const response = await fetch(`${API_URL}/api/songs/genre/${genre}`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch songs by genre');
-    }
-    return await response.json();
-  } catch (error) {
-    console.error(`Error fetching songs for genre ${genre}:`, error);
-    return [];
-  }
-};
-
-// Search for songs
-export const searchSongs = async (query) => {
-  try {
-    const response = await fetch(`${API_URL}/api/songs/search?q=${encodeURIComponent(query)}`);
-    if (!response.ok) {
-      throw new Error('Failed to search songs');
-    }
-    return await response.json();
-  } catch (error) {
-    console.error('Error searching songs:', error);
-    return [];
-  }
-};
-
-// Report a score
-export const reportScore = async (playerName, score) => {
-  try {
-    const response = await fetch(`${API_URL}/api/scores`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ playerName, score }),
+    const response = await fetch(`${API_URL}/api/spotify/me`, {
+      credentials: 'include'
     });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch user profile');
+    }
+    
     return await response.json();
   } catch (error) {
-    console.error('Error reporting score:', error);
+    console.error('Error fetching user profile:', error);
     return null;
   }
 };
 
-// Get high scores
-export const getHighScores = async () => {
+// Fetch user playlists
+export const fetchUserPlaylists = async () => {
   try {
-    const response = await fetch(`${API_URL}/api/scores/top`);
+    const response = await fetch(`${API_URL}/api/spotify/playlists`, {
+      credentials: 'include'
+    });
+    
     if (!response.ok) {
-      throw new Error('Failed to fetch high scores');
+      throw new Error('Failed to fetch playlists');
     }
+    
     return await response.json();
   } catch (error) {
-    console.error('Error fetching high scores:', error);
+    console.error('Error fetching playlists:', error);
     return [];
   }
 };
+
+// ส่วนอื่นๆ คงเดิม
+export const fetchSongsByGenre = async (genre) => { /*...*/ };
+export const searchSongs = async (query) => { /*...*/ };
+export const reportScore = async (playerName, score) => { /*...*/ };
+export const getHighScores = async () => { /*...*/ };

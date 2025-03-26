@@ -1,4 +1,5 @@
 import React from 'react';
+import SpotifyLogin from './SpotifyLogin'; // เพิ่มบรรทัดนี้
 
 const GameStart = ({ onStart, onChangeMode, gameMode, onShowScores }) => {
   return (
@@ -7,6 +8,9 @@ const GameStart = ({ onStart, onChangeMode, gameMode, onShowScores }) => {
       <p className="mb-2">1. ฟังเพลงและทายชื่อเพลง</p>
       <p className="mb-2">2. คุณมีเวลา 10 วินาทีในการตอบ</p>
       <p className="mb-6">3. ยิ่งตอบเร็ว คะแนนยิ่งเพิ่ม!</p>
+      
+      {/* เพิ่มปุ่ม Login Spotify */}
+      <SpotifyLogin />
       
       <div className="mb-4">
         <h3 className="text-lg font-medium mb-2">เลือกโหมด:</h3>
