@@ -1,9 +1,9 @@
+// File: backend/src/services/spotifyService.js
 const axios = require('axios');
 const querystring = require('querystring');
 const config = require('../config');
-const authController = require('../controllers/authController');
 
-// Get client credentials token
+// Get client credentials token - for public endpoints that don't need user auth
 const getClientCredentialsToken = async () => {
   try {
     const response = await axios({
@@ -22,68 +22,34 @@ const getClientCredentialsToken = async () => {
 
     return response.data.access_token;
   } catch (error) {
-    console.error('Error getting Spotify token:', error);
-    throw error;
-  }
-};
-
-// Refresh access token without Express req/res
-const refreshAccessToken = async () => {
-  if (!authController.tokens.refreshToken) {
-    throw new Error('No refresh token available');
-  }
-  
-  try {
-    const response = await axios({
-      method: 'post',
-      url: 'https://accounts.spotify.com/api/token',
-      data: querystring.stringify({
-        grant_type: 'refresh_token',
-        refresh_token: authController.tokens.refreshToken
-      }),
-      headers: {
-        'Authorization': 'Basic ' + Buffer.from(
-          config.spotify.clientId + ':' + config.spotify.clientSecret
-        ).toString('base64'),
-        'Content-Type': 'application/x-www-form-urlencoded'
-      }
-    });
-    
-    // อัพเดท tokens
-    authController.tokens.accessToken = response.data.access_token;
-    authController.tokens.tokenExpiry = Date.now() + (response.data.expires_in * 1000);
-    
-    // ถ้าได้รับ refresh token ใหม่ ให้อัพเดทด้วย
-    if (response.data.refresh_token) {
-      authController.tokens.refreshToken = response.data.refresh_token;
-    }
-    
-    return authController.tokens.accessToken;
-  } catch (error) {
-    console.error('Error refreshing token:', error.response?.data || error.message);
+    console.error('Error getting Spotify token:', error.response?.data || error.message);
     throw error;
   }
 };
 
 // Get user's playlists
-const getUserPlaylists = async () => {
+const getUserPlaylists = async (req) => {
   try {
-    // ตรวจสอบว่ามี token หรือไม่
-    if (!authController.tokens.accessToken) {
+    // If req is not provided or doesn't have cookies, use client credentials
+    if (!req || !req.cookies || !req.cookies.spotify_access_token) {
       throw new Error('Not authenticated');
     }
     
-    // ตรวจสอบว่า token หมดอายุหรือไม่
-    if (authController.tokens.tokenExpiry < Date.now()) {
-      await refreshAccessToken();
+    // Get access token from cookie
+    const accessToken = req.cookies.spotify_access_token;
+    
+    // Check if token is expired
+    const tokenExpiry = req.cookies.spotify_token_expiry;
+    if (tokenExpiry && parseInt(tokenExpiry) < Date.now()) {
+      throw new Error('Token expired');
     }
     
-    // ดึงรายการ playlists ของผู้ใช้
+    // Get user playlists
     const response = await axios({
       method: 'get',
       url: 'https://api.spotify.com/v1/me/playlists',
       headers: {
-        'Authorization': `Bearer ${authController.tokens.accessToken}`
+        'Authorization': `Bearer ${accessToken}`
       },
       params: {
         limit: 50
@@ -98,23 +64,25 @@ const getUserPlaylists = async () => {
 };
 
 // Get tracks from a specific playlist
-const getPlaylistTracks = async (playlistId) => {
-  // ใช้ default playlist ถ้าไม่ได้ระบุ
+const getPlaylistTracks = async (playlistId, req) => {
+  // Use default playlist if not specified
   const playlist = playlistId || config.spotify.playlists.thai;
   
   try {
-    // ดึงข้อมูลจาก API ด้วย client credentials หรือ auth token
     let token;
     
-    // ถ้ามี auth token ให้ใช้ auth token
-    if (authController.tokens.accessToken) {
-      // ตรวจสอบว่า token หมดอายุหรือไม่
-      if (authController.tokens.tokenExpiry < Date.now()) {
-        await refreshAccessToken();
+    // Try to get access token from request cookies (if user is logged in)
+    if (req && req.cookies && req.cookies.spotify_access_token) {
+      token = req.cookies.spotify_access_token;
+      
+      // Check if token is expired
+      const tokenExpiry = req.cookies.spotify_token_expiry;
+      if (tokenExpiry && parseInt(tokenExpiry) < Date.now()) {
+        // If token is expired, we'll fall back to client credentials
+        token = await getClientCredentialsToken();
       }
-      token = authController.tokens.accessToken;
     } else {
-      // ถ้าไม่มี auth token ให้ใช้ client credentials
+      // User not logged in, use client credentials
       token = await getClientCredentialsToken();
     }
     
@@ -130,7 +98,7 @@ const getPlaylistTracks = async (playlistId) => {
       }
     });
 
-    // ปรับรูปแบบข้อมูลสำหรับเกม
+    // Process data for the game
     const songs = response.data.items
       .filter(item => item.track && item.track.preview_url)
       .map(item => ({
@@ -141,9 +109,14 @@ const getPlaylistTracks = async (playlistId) => {
         image: item.track.album.images[0].url
       }));
 
+    // If no songs with preview URLs found, throw error to trigger fallback
+    if (songs.length === 0) {
+      throw new Error('No songs with preview URLs available');
+    }
+
     return songs;
   } catch (error) {
-    console.error('Error fetching playlist tracks:', error);
+    console.error('Error fetching playlist tracks:', error.response?.data || error.message);
     throw error;
   }
 };
@@ -151,7 +124,7 @@ const getPlaylistTracks = async (playlistId) => {
 // Search for tracks by query
 const searchTracks = async (query, limit = 20) => {
   try {
-    // ใช้ client credentials
+    // Always use client credentials for search
     const token = await getClientCredentialsToken();
     
     const response = await axios({
@@ -163,7 +136,8 @@ const searchTracks = async (query, limit = 20) => {
       params: {
         q: query,
         type: 'track',
-        limit
+        limit,
+        market: 'TH' // Add market parameter for better results
       }
     });
 
@@ -188,6 +162,5 @@ module.exports = {
   getUserPlaylists,
   getPlaylistTracks,
   searchTracks,
-  getClientCredentialsToken,
-  refreshAccessToken
+  getClientCredentialsToken
 };

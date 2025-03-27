@@ -1,16 +1,19 @@
-// File: src/App.js
-import React, { useState, useEffect, useRef } from 'react';
-import './App.css';
-import GameStart from './components/GameStart';
-import GamePlay from './components/GamePlay';
-import GameFeedback from './components/GameFeedback';
-import ScoreBoard from './components/ScoreBoard';
-import { fetchSongs, getSongsByGenre, getPlaylistTracks } from './services/api';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import GameStart from '../components/GameStart';
+import GamePlay from '../components/GamePlay';
+import GameFeedback from '../components/GameFeedback';
+import ScoreBoard from '../components/ScoreBoard';
+import UserPlaylistSelector from '../components/UserPlaylistSelector';
+import { getSongs, getSongsByGenre, getPlaylistTracks } from '../services/api';
+import { saveHighScore } from '../services/scoreService';
 
-function App() {
-  // Game state
-  const [gameState, setGameState] = useState('start'); // 'start', 'playing', 'feedback', 'end', 'scores'
-  const [gameMode, setGameMode] = useState('normal'); // 'normal', 'artist'
+// Utilities for string comparison
+import { compareStrings } from '../utils/stringUtils';
+
+const Game = () => {
+  // Game state management
+  const [gameState, setGameState] = useState('start'); // start, playing, feedback, end, scores
+  const [gameMode, setGameMode] = useState('normal'); // normal, artist
   const [songs, setSongs] = useState([]);
   const [currentSongIndex, setCurrentSongIndex] = useState(0);
   const [currentSong, setCurrentSong] = useState(null);
@@ -23,57 +26,46 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [namePrompted, setNamePrompted] = useState(false);
-  
-  // Audio player reference
+  const [showPlaylistSelector, setShowPlaylistSelector] = useState(false);
+  const [isNamePromptShown, setIsNamePromptShown] = useState(false); // Track if name prompt has been shown
+
+  // Audio player
   const audioRef = useRef(null);
   const timerRef = useRef(null);
 
   // Load songs when component mounts
   useEffect(() => {
+    const loadSongs = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        // Get songs from API
+        const response = await getSongs();
+        
+        if (response && response.length > 0) {
+          // Shuffle songs
+          const shuffledSongs = [...response].sort(() => Math.random() - 0.5);
+          setSongs(shuffledSongs);
+        } else {
+          throw new Error('No songs available');
+        }
+      } catch (err) {
+        console.error('Error loading songs:', err);
+        setError('ไม่สามารถโหลดเพลงได้ โปรดลองอีกครั้งในภายหลัง');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSongs();
+    
     // Check if player name exists in localStorage
     const savedName = localStorage.getItem('musicQuizPlayerName');
     if (savedName) {
       setPlayerName(savedName);
-      setNamePrompted(true);
     }
-    
-    // Load songs
-    loadSongs();
-    
-    // Cleanup function for timer and audio
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-    };
   }, []);
-
-  // Load songs from API
-  const loadSongs = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      const response = await fetchSongs();
-      
-      if (response && response.length > 0) {
-        // Shuffle songs
-        const shuffledSongs = [...response].sort(() => Math.random() - 0.5);
-        setSongs(shuffledSongs);
-      } else {
-        throw new Error('No songs available');
-      }
-    } catch (err) {
-      console.error('Error loading songs:', err);
-      setError('ไม่สามารถโหลดเพลงได้ โปรดลองอีกครั้งในภายหลัง');
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Load songs by genre
   const loadSongsByGenre = async (genre) => {
@@ -98,7 +90,7 @@ function App() {
     }
   };
 
-  // Load songs from playlist
+  // Load songs from user's playlist
   const loadSongsFromPlaylist = async (playlistId) => {
     try {
       setIsLoading(true);
@@ -110,6 +102,7 @@ function App() {
         // Shuffle songs
         const shuffledSongs = [...response].sort(() => Math.random() - 0.5);
         setSongs(shuffledSongs);
+        setShowPlaylistSelector(false);
       } else {
         throw new Error('No playable songs in this playlist');
       }
@@ -122,11 +115,11 @@ function App() {
   };
 
   // Start game
-  const startGame = () => {
-    // Check if we need to prompt for name
-    if (!playerName && !namePrompted) {
+  const startGame = useCallback(() => {
+    // Check if player name is set
+    if (!playerName && !isNamePromptShown) {
       const name = prompt('กรุณาใส่ชื่อของคุณ:');
-      setNamePrompted(true);
+      setIsNamePromptShown(true); // Mark that we've shown the prompt
       
       if (name) {
         setPlayerName(name);
@@ -137,6 +130,7 @@ function App() {
     }
     
     // Reset game state
+    setGameState('playing');
     setCurrentSongIndex(0);
     setScore(0);
     setTimeLeft(10);
@@ -144,25 +138,24 @@ function App() {
     // Set current song
     if (songs.length > 0) {
       setCurrentSong(songs[0]);
-      setGameState('playing');
       
       // Play audio
       if (audioRef.current) {
+        audioRef.current.pause();
         audioRef.current.src = songs[0].preview_url;
         audioRef.current.play().catch(error => {
           console.error('Error playing audio:', error);
+          setError('ไม่สามารถเล่นเพลงได้ โปรดลองอีกครั้ง');
         });
       }
       
       // Start timer
       startTimer();
-    } else {
-      setError('ไม่มีเพลงที่จะเล่น โปรดลองใหม่อีกครั้ง');
     }
-  };
+  }, [playerName, songs, isNamePromptShown]);
 
   // Timer function
-  const startTimer = () => {
+  const startTimer = useCallback(() => {
     // Clear any existing timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -182,23 +175,23 @@ function App() {
         return prev - 1;
       });
     }, 1000);
-  };
+  }, []);
 
   // Handle timeout
-  const handleTimeout = () => {
+  const handleTimeout = useCallback(() => {
     // Stop audio
     if (audioRef.current) {
       audioRef.current.pause();
     }
     
-    // Show feedback (incorrect)
+    // Show feedback
     setIsCorrect(false);
     setEarnedPoints(0);
     setGameState('feedback');
-  };
+  }, []);
 
-  // Handle guess
-  const handleGuess = (guess) => {
+  // Handle user guess
+  const handleGuess = useCallback((guess) => {
     // Stop timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -228,37 +221,10 @@ function App() {
     setEarnedPoints(points);
     setScore(prev => prev + points);
     setGameState('feedback');
-  };
-
-  // String comparison utility
-  const compareStrings = (str1, str2) => {
-    if (!str1 || !str2) return false;
-    
-    // Normalize strings for comparison
-    const normalize = (s) => s.trim().toLowerCase()
-      .replace(/\s+/g, ' ')
-      .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
-    
-    const normalizedStr1 = normalize(str1);
-    const normalizedStr2 = normalize(str2);
-    
-    // Exact match
-    if (normalizedStr1 === normalizedStr2) return true;
-    
-    // Check if one string contains the other
-    if (normalizedStr1.includes(normalizedStr2) || normalizedStr2.includes(normalizedStr1)) {
-      // Make sure it's a substantial match
-      const longerLength = Math.max(normalizedStr1.length, normalizedStr2.length);
-      const shorterLength = Math.min(normalizedStr1.length, normalizedStr2.length);
-      
-      return shorterLength / longerLength >= 0.7;
-    }
-    
-    return false;
-  };
+  }, [gameMode, currentSong, timeLeft]);
 
   // Handle skip
-  const handleSkip = () => {
+  const handleSkip = useCallback(() => {
     // Stop timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -273,10 +239,10 @@ function App() {
     setIsCorrect(false);
     setEarnedPoints(0);
     setGameState('feedback');
-  };
+  }, []);
 
   // Go to next song
-  const goToNextSong = () => {
+  const goToNextSong = useCallback(() => {
     const nextIndex = currentSongIndex + 1;
     
     // Check if we've reached the end
@@ -300,57 +266,94 @@ function App() {
     
     // Start timer
     startTimer();
-  };
+  }, [currentSongIndex, rounds, songs, startTimer]);
 
-  // Save score
-  const saveScore = async () => {
+  // Save high score
+  const saveScore = useCallback(async () => {
     try {
       // Create score object
       const scoreData = {
-        name: playerName || 'ไม่ระบุชื่อ',
+        name: playerName,
         score,
         mode: gameMode,
         date: new Date().toISOString()
       };
       
-      // Get existing scores from localStorage
-      const existingScores = JSON.parse(localStorage.getItem('musicQuizHighScores') || '[]');
-      
-      // Add new score
-      existingScores.push(scoreData);
-      
-      // Sort by score (highest first)
-      existingScores.sort((a, b) => b.score - a.score);
-      
-      // Keep only top 10
-      const topScores = existingScores.slice(0, 10);
-      
-      // Save back to localStorage
-      localStorage.setItem('musicQuizHighScores', JSON.stringify(topScores));
+      // Save to API (or localStorage as fallback)
+      await saveHighScore(scoreData);
       
       alert('บันทึกคะแนนเรียบร้อย!');
     } catch (error) {
       console.error('Error saving score:', error);
-      alert('ไม่สามารถบันทึกคะแนนได้');
+      
+      // Fallback to localStorage
+      try {
+        // Get existing scores from localStorage
+        const existingScores = JSON.parse(localStorage.getItem('musicQuizHighScores') || '[]');
+        
+        // Add new score
+        existingScores.push(scoreData);
+        
+        // Sort by score (highest first)
+        existingScores.sort((a, b) => b.score - a.score);
+        
+        // Keep only top 10
+        const topScores = existingScores.slice(0, 10);
+        
+        // Save back to localStorage
+        localStorage.setItem('musicQuizHighScores', JSON.stringify(topScores));
+        
+        alert('บันทึกคะแนนเรียบร้อย! (แบบออฟไลน์)');
+      } catch (localError) {
+        console.error('Error saving score to localStorage:', localError);
+        alert('ไม่สามารถบันทึกคะแนนได้');
+      }
     }
-  };
+  }, [playerName, score, gameMode]);
 
   // Change game mode
   const changeGameMode = (mode) => {
     setGameMode(mode);
   };
 
-  // Show scores
+  // Show score board
   const showScores = () => {
     setGameState('scores');
   };
 
-  // Spotify login status change handler
+  // Go back to start
+  const goToStart = () => {
+    setGameState('start');
+  };
+
+  // Handle Spotify login status change
   const handleLoginStatusChange = (status) => {
     setIsLoggedIn(status);
   };
 
-  // Loading state
+  // Handle playlist selection
+  const handleShowPlaylistSelector = () => {
+    if (isLoggedIn) {
+      setShowPlaylistSelector(true);
+    } else {
+      alert('กรุณาเข้าสู่ระบบ Spotify ก่อน');
+    }
+  };
+
+  // Clean up when component unmounts
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+    };
+  }, []);
+
+  // Render loading state
   if (isLoading && gameState === 'start') {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-r from-purple-600 to-indigo-600 p-4">
@@ -364,7 +367,7 @@ function App() {
     );
   }
 
-  // Error state
+  // Render error state
   if (error && gameState === 'start') {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-r from-purple-600 to-indigo-600 p-4">
@@ -384,18 +387,33 @@ function App() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gradient-to-r from-purple-600 to-indigo-600 p-4">
-      {/* Hidden audio player */}
+      {/* Audio Player (hidden) */}
       <audio ref={audioRef} />
       
-      {/* Game states */}
-      {gameState === 'start' && (
+      {/* Game Content */}
+      {gameState === 'start' && !showPlaylistSelector && (
         <GameStart
           onStart={startGame}
           onChangeMode={changeGameMode}
           gameMode={gameMode}
           onShowScores={showScores}
           onLoginStatusChange={handleLoginStatusChange}
+          onSelectPlaylist={handleShowPlaylistSelector}
+          isLoggedIn={isLoggedIn}
         />
+      )}
+      
+      {showPlaylistSelector && (
+        <div className="bg-white rounded-lg p-6 shadow-lg max-w-md w-full">
+          <h2 className="text-xl font-bold mb-4 text-center">เลือกเพลย์ลิสต์</h2>
+          <UserPlaylistSelector onSelectPlaylist={loadSongsFromPlaylist} />
+          <button
+            onClick={() => setShowPlaylistSelector(false)}
+            className="w-full bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
+          >
+            กลับ
+          </button>
+        </div>
       )}
       
       {gameState === 'playing' && currentSong && (
@@ -436,10 +454,10 @@ function App() {
       )}
       
       {gameState === 'scores' && (
-        <ScoreBoard onBack={() => setGameState('start')} />
+        <ScoreBoard onBack={goToStart} />
       )}
     </div>
   );
-}
+};
 
-export default App;
+export default Game;

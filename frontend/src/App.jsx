@@ -95,12 +95,24 @@ function App() {
   // ส่วนอื่นๆ เหมือนเดิม...
   
   // Start the game
-  const handleStart = () => {
-    setScore(0);
-    setRound(1);
-    setGameState('playing');
+const handleStart = () => {
+  console.log("Starting game, playlist:", playlist);
+  // ตรวจสอบว่ามีเพลงในรายการหรือไม่
+  if (!playlist || playlist.length === 0) {
+    console.error("No songs in playlist");
+    alert("ไม่พบเพลงในรายการ กรุณาลองใหม่อีกครั้ง");
+    return;
+  }
+  
+  setScore(0);
+  setRound(1);
+  setGameState('playing');
+  
+  // เรียกฟังก์ชัน nextSong ภายใน setTimeout เพื่อให้แน่ใจว่า state อัพเดทแล้ว
+  setTimeout(() => {
     nextSong();
-  };
+  }, 100);
+};
   
   // เลือก playlist
   const handleSelectPlaylist = (playlistId) => {

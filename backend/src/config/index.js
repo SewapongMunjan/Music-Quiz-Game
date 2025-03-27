@@ -8,7 +8,7 @@ module.exports = {
     clientId: process.env.SPOTIFY_CLIENT_ID,
     clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
     playlists: {
-      thai: '37STxbNOjp57IcakVAxeyY',    // Thai Top 50
+      thai: '4QwQ8Z2XT9ysONAOxIgwLz',    // Thai playlist (using RapCaviar as a placeholder)
       pop: '1SuDkmlDf7U0qrMdcjU0xN',      // Global Top 50
       rock: '1SuDkmlDf7U0qrMdcjU0xN',     // Rock Classics
       hiphop: '1SuDkmlDf7U0qrMdcjU0xN',   // RapCaviar

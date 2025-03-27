@@ -18,21 +18,25 @@ router.get('/api/songs/search', songController.searchSongs);
 // Get user's playlists
 router.get('/api/spotify/playlists', async (req, res, next) => {
   try {
-    const playlists = await spotifyService.getUserPlaylists();
+    const playlists = await spotifyService.getUserPlaylists(req);
     res.json(playlists);
   } catch (error) {
-    next(error);
+    console.error('Error fetching playlists:', error.message);
+    res.status(401).json({ error: 'Failed to fetch playlists', message: error.message });
   }
 });
 
-// Get tracks from a specific playlist
+// Get tracks from a specific playlist - FIXED: now using route parameter
 router.get('/api/spotify/playlist/:playlistId/tracks', async (req, res, next) => {
   try {
     const { playlistId } = req.params;
-    const tracks = await spotifyService.getPlaylistTracks(playlistId);
+    const tracks = await spotifyService.getPlaylistTracks(playlistId, req);
     res.json(tracks);
   } catch (error) {
-    next(error);
+    console.error('Error fetching playlist tracks:', error.message);
+    // Return fallback songs if playlist tracks fetch fails
+    const fallbackSongs = await songController.getFallbackSongs(req, res);
+    res.json(fallbackSongs);
   }
 });
 
